@@ -1,18 +1,24 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env",extra="ignore")
+    app_name:str = "RAG Assistant"
+    app_version:str = "0.1.0"
+    debug:bool = True
 
-    llm_api_key: str = ""         
-    llm_model: str = ""
-    embedding_model: str = "BAAI/bge-small-en-v1.5"
-    vector_backend: str = "faiss"
-    chunk_size_tokens: int = 400
-    chunk_overlap_tokens: int = 60
-    top_k: int = 4
-    relevance_threshold: float = 0.35
-    max_upload_mb: int = 50
-    data_dir: str = "../data"
-    log_level: str = "INFO"
+    api_prefix:str = "/api"
 
+    vector_backend:str = "qdrant"
+
+    qdrant_url:str = "http://localhost:6333"
+    qdrant_collection:str = "document_chunks"
+
+    embedding_model:str = "BAAI/bge-small-en-v1.5"
+    embedding_dimension:int = 384
+
+    model_config = SettingsConfigDict(
+        env_file = ".env",
+        env_file_encoding = "utf-8",
+        case_sensitive = False,
+        extra = "ignore",
+    )
 settings = Settings()

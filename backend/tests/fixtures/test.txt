@@ -1,0 +1,6 @@
+RAG Assistant Test
+
+This is a plain text document.
+
+Retrieval-Augmented Generation combines
+information retrieval with language models.

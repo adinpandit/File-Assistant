@@ -6,3 +6,4 @@ data/
 *.faiss
 .pytest_cache/
 node_modules/
+project_overview/
