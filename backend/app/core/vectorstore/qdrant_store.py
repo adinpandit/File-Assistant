@@ -1,0 +1,124 @@
+from typing import Any
+from qdrant_client import QdrantClient
+from qdrant_client.models import (Distance,PointStruct,VectorParams)
+from app.config import settings
+from app.core.chunking import chunk
+
+class QdrantVectorStore:
+    def __init__(self , url:str|None=None , collection_name:str|None=None , vector_size:int|None=None,)->None:
+
+        self.url = url or settings.qdrant_url
+        self.collection_name = (collection_name or settings.qdrant_collection)
+        self.vector_size = (vector_size or settings.embedding_dimension)
+        self.client = QdrantClient(url=self.url)
+
+    def collection_exists(self)->bool:
+        collections = self.client.get_collections()
+
+        return any(collection.name == self.collection_name 
+                   for collection in collections.collections
+        )
+
+    def create_collection(self)->None:
+        if self.collection_exists():
+            return 
+
+        self.client.create_collection(
+            collection_name=self.collection_name,
+            vectors_config=VectorParams(size = self.vector_size , distance = Distance.COSINE),
+        )
+
+    def ensure_collection(self)->None:
+        if not self.collection_exists():
+            self.create_collection()
+
+    def upsert_chunks(self , chunks:list[chunk] , embeddings:list[list[float]])->None:
+        if len(chunks) != len(embeddings):
+            raise ValueError("Number of chunks must match number of embeddings")
+
+        if not chunks:
+            return
+
+        self.ensure_collection()
+
+        points:list[PointStruct]=[]
+
+        for chunk,embedding in zip(chunks , embeddings , strict=True):
+            payload:dict[str,Any] = {
+                "chunk_id":chunk.chunk_id,
+                "document_id":chunk.document_id,
+                "user_id":chunk.user_id,
+                "chunk_index":chunk.chunk_index,
+                "page_number":chunk.page_number,
+                "text":chunk.text,
+            }
+
+            points.append(
+                PointStruct(
+                    id=chunk.chunk_id,
+                    vector=embedding,
+                    payload=payload,
+                )
+            )
+
+        self.client.upsert(
+            collection_name = self.collection_name,
+            points = points,
+        )
+
+    def search(self , query_embedding:list[float] , limit:int=5)->list[dict[str,Any]]:
+        if not query_embedding:
+            return []
+
+        if limit  <= 0:
+            raise ValueError("Limit must be greater than 0")
+
+        self.ensure_collection()
+
+        results = self.client.search(
+            collection_name=self.collection_name,
+            query_vector=query_embedding,
+            limit=limit,
+        )
+
+        return [
+            {
+                "id":result.id,
+                "score":result.score,
+                "payload":result.payload,
+            }
+            for result in results
+        ]
+
+    def delete_document(self , document_id:str,)->None:
+        from qdrant_client.models import(FieldCondition,Filter,MatchValue,)
+
+        if not self.collection_exists():
+            return
+
+        self.client.delete(
+            collection_name = self.collection_name,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="document_id",
+                        match=MatchValue(
+                            value=document_id,
+                        ),
+                    )
+                ]
+            ),
+        )
+
+    def count(self)->int:
+        if not self.collection_exists():
+            return 0
+
+        result = self.client.count(
+            collection_name = self.collection_name,
+            exact = True,
+        )
+
+        return result.count
+
+            

@@ -1,9 +1,11 @@
 fastapi
 uvicorn[standard]
+pydantic
 pydantic-settings
-python-multipart
-pymupdf
-sentence-transformers
-faiss-cpu
+pypdf
 pytest
 httpx
+sentence-transformers
+torch
+numpy
+qdrant-client
