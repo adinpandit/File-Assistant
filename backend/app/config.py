@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     embedding_model:str = "BAAI/bge-small-en-v1.5"
     embedding_dimension:int = 384
 
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5-mini"
+
+    upload_dir:str = "uploads"
+    max_file_size_md:int = 50
+
     model_config = SettingsConfigDict(
         env_file = ".env",
         env_file_encoding = "utf-8",

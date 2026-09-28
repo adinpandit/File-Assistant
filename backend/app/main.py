@@ -1,11 +1,13 @@
 from fastapi import FastAPI
-
 from app.config import settings
 from app.api.routes.health import router as health_router
 from app.api.routes.upload import router as upload_router
 from app.api.routes.documents import router as document_router
 from app.api.routes.query import router as query_router
 from app.api.routes.history import router as history_router
+#from app.core.logging import setup_logging
+
+#setup_logging()
 
 app = FastAPI(
     title = settings.app_name,

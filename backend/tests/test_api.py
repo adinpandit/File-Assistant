@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
-
 from app.main import app
+from app.api.routes import query
 
 
 client = TestClient(app)
@@ -26,10 +26,10 @@ def test_health():
     }
 
 
-def test_upload_endpoint():
+def test_upload_endpoint_requires_file():
     response = client.post("/api/upload")
 
-    assert response.status_code == 200
+    assert response.status_code == 422
 
 
 def test_documents_endpoint():
@@ -46,7 +46,17 @@ def test_history_endpoint():
     assert response.json()["history"] == []
 
 
-def test_query_endpoint():
-    response = client.post("/api/query")
+def test_query_endpoint(monkeypatch):
+    class FakeVectorStore:
+        def search(self, query_embedding, limit):
+            return []
+
+    monkeypatch.setattr(query, "embed_query", lambda text: [0.1, 0.2, 0.3])
+    monkeypatch.setattr(query, "QdrantVectorStore", FakeVectorStore)
+
+    response = client.post(
+        "/api/query",
+        json={"query": "What is Python?"},
+    )
 
     assert response.status_code == 200
