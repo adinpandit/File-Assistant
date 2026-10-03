@@ -2,8 +2,11 @@
 __pycache__/
 *.pyc
 .env
+uploads/
 data/
 *.faiss
 .pytest_cache/
+.coverage
 node_modules/
+.vscode/
 project_overview/

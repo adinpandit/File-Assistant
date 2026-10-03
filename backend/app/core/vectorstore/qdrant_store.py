@@ -1,6 +1,6 @@
 from typing import Any
 from qdrant_client import QdrantClient
-from qdrant_client.models import (Distance,PointStruct,VectorParams)
+from qdrant_client.models import (Distance,PointStruct,VectorParams,FieldCondition,Filter,MatchValue)
 from app.config import settings
 from app.core.chunking import chunk
 
@@ -66,7 +66,7 @@ class QdrantVectorStore:
             points = points,
         )
 
-    def search(self , query_embedding:list[float] , limit:int=5)->list[dict[str,Any]]:
+    def search(self , query_embedding:list[float] , limit:int=5 , document_id:str|None=None , user_id:str|None=None,)->list[dict[str,Any]]:
         if not query_embedding:
             return []
 
@@ -75,9 +75,37 @@ class QdrantVectorStore:
 
         self.ensure_collection()
 
+        conditions:list[FieldCondition]=[]
+
+        if document_id is not None:
+            conditions.append(
+                FieldCondition(
+                    key="document_id",
+                    match=MatchValue(
+                        value=document_id,
+                    ),
+                )
+            )
+
+        if user_id is not None:
+            conditions.append(
+                FieldCondition(
+                    key="user_id",
+                    match=MatchValue(
+                        value=user_id,
+                    ),
+                )
+            )
+
+        search_filter = None
+
+        if conditions:
+            search_filter = Filter(must=conditions,)
+
         results = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_embedding,
+            query_filter=search_filter,
             limit=limit,
         )
 
@@ -91,7 +119,6 @@ class QdrantVectorStore:
         ]
 
     def delete_document(self , document_id:str,)->None:
-        from qdrant_client.models import(FieldCondition,Filter,MatchValue,)
 
         if not self.collection_exists():
             return

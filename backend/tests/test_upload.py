@@ -1,10 +1,16 @@
+from datetime import datetime, timezone
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.routes import upload
+from app.models.document import DocumentResponse
 
 
 client = TestClient(app)
+
+pytestmark = pytest.mark.usefixtures("authenticated_user")
 
 
 def test_upload_txt_document(
@@ -14,6 +20,7 @@ def test_upload_txt_document(
     def fake_ingest_document(
         file_path,
         document_id,
+        user_id=None,
     ):
         result_document_id = document_id
 
@@ -24,10 +31,22 @@ def test_upload_txt_document(
 
         return Result()
 
+    def fake_create_document(**kwargs):
+        return DocumentResponse(
+            upload_time=datetime.now(timezone.utc),
+            **kwargs,
+        )
+
     monkeypatch.setattr(
         upload,
         "ingest_document",
         fake_ingest_document,
+    )
+
+    monkeypatch.setattr(
+        upload.document_store,
+        "create_document",
+        fake_create_document,
     )
 
     monkeypatch.setattr(

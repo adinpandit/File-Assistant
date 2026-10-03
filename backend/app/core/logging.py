@@ -1,4 +1,4 @@
-'''import logging 
+import logging 
 
 def setup_logging()->None:
     logging.basicConfig(
@@ -9,4 +9,4 @@ def setup_logging()->None:
             "%(name)s | "
             "%(message)s"
         ),
-    )'''
+    )

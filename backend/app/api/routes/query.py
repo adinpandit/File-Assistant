@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException , Depends
 from pydantic import BaseModel, Field
 from app.core.embeddings import embed_query
 from app.core.vectorstore.qdrant_store import QdrantVectorStore
 from app.core.llm import generate_answer
-from app.services.retrieval import (build_citations,build_context,)
+from app.services.retrieval import build_citations,build_context
+from app.core.auth import get_current_user
 
 router = APIRouter(
     prefix="/query",
@@ -22,6 +23,8 @@ class QueryRequest(BaseModel):
         ge=1,
         le=20,
     )
+
+    document_id:str|None = None
 
 class CitationResponse(BaseModel):
     citation_id: str
@@ -46,11 +49,7 @@ class QueryResponse(BaseModel):
 
 
 @router.post("",response_model=QueryResponse,)
-def query_documents(request: QueryRequest,):
-    """
-    Embed the user query and retrieve
-    the most relevant document chunks.
-    """
+def query_documents(request: QueryRequest,current_user=Depends(get_current_user),):
 
     try:
         query_embedding = embed_query(
@@ -69,6 +68,8 @@ def query_documents(request: QueryRequest,):
         results = vector_store.search(
             query_embedding=query_embedding,
             limit=request.limit,
+            document_id=request.document_id,
+            user_id=str(current_user["user_id"]),
         )
 
     except Exception as exc:

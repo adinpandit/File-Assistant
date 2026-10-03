@@ -1,9 +1,12 @@
+import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.api.routes import query
 
 
 client = TestClient(app)
+
+pytestmark = pytest.mark.usefixtures("authenticated_user")
 
 
 def test_query_documents(
@@ -17,6 +20,8 @@ def test_query_documents(
             self,
             query_embedding,
             limit,
+            document_id=None,
+            user_id=None,
         ):
             assert query_embedding == [
                 0.1,

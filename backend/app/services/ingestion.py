@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from pathlib import Path
-#import logging
+import logging
 from app.core.chunking import chunk , chunk_pages
 from app.core.embeddings import embed_documents
 from app.core.parsing import parse_document
 from app.core.vectorstore.qdrant_store import QdrantVectorStore
 
-#logger = logging.getLoggerClass(__name__)
+logger = logging.getLogger(__name__)
 
 @dataclass
 class IngestionResult:
@@ -20,10 +20,10 @@ def ingest_document(file_path:str|Path , document_id:str , user_id:str|None=None
     if not path.exists():
         raise FileExistsError(f"Document not found : {path}")
 
-    #logger.info(
-        #"Starting ingestion for document %s",
+    logger.info(
+        "Starting ingestion for document %s",
         document_id,
-    #)
+    )
 
     pages = parse_document(path)
 
@@ -41,18 +41,18 @@ def ingest_document(file_path:str|Path , document_id:str , user_id:str|None=None
 
     vector_store.upsert_chunks(chunks=chunks , embeddings=embeddings)
 
-    return IngestionResult(
+    result = IngestionResult(
         document_id=document_id,
         page_count=len(pages),
         chunk_count=len(chunks),
     )
 
-    #logger.info(
-        #"Finished ingestion for document %s: %d pages, %d chunks",
-        #document_id,
-        #result.page_count,
-        #result.chunk_count,
-    #)
+    logger.info(
+        "Finished ingestion for document %s: %d pages, %d chunks",
+        document_id,
+        result.page_count,
+        result.chunk_count,
+    )
 
-    #return result
+    return result
 

@@ -1,12 +1,17 @@
 fastapi
+starlette>=1.7.0
 uvicorn[standard]
 pydantic
 pydantic-settings
 pypdf
 pytest
+pgserver
 httpx
 sentence-transformers
 torch
 numpy
 qdrant-client
+python-multipart
 openai
+psycopg[binary]
+PyJWT

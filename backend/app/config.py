@@ -7,8 +7,12 @@ class Settings(BaseSettings):
 
     api_prefix:str = "/api"
 
-    vector_backend:str = "qdrant"
+    database_url: str = (
+        "postgresql://rag_user:rag_password"
+        "@localhost:5432/rag_assistant"
+    )
 
+    vector_backend:str = "qdrant"
     qdrant_url:str = "http://localhost:6333"
     qdrant_collection:str = "document_chunks"
 
@@ -19,7 +23,11 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5-mini"
 
     upload_dir:str = "uploads"
-    max_file_size_md:int = 50
+    max_file_size_mb:int = 50
+
+    jwt_secret_key: str = "change-this-in-production"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
 
     model_config = SettingsConfigDict(
         env_file = ".env",
