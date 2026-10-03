@@ -102,12 +102,12 @@ class QdrantVectorStore:
         if conditions:
             search_filter = Filter(must=conditions,)
 
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_embedding,
+            query=query_embedding,
             query_filter=search_filter,
             limit=limit,
-        )
+        ).points
 
         return [
             {

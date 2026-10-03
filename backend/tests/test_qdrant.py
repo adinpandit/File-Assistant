@@ -16,6 +16,14 @@ class FakeResult:
         self.payload = payload
 
 
+class FakeQueryResult:
+    def __init__(
+        self,
+        points,
+    ):
+        self.points = points
+
+
 class FakeCountResult:
     def __init__(
         self,
@@ -71,10 +79,10 @@ class FakeClient:
     ):
         self.points.extend(points)
 
-    def search(
+    def query_points(
         self,
         collection_name,
-        query_vector,
+        query,
         limit,
         query_filter=None,
     ):
@@ -94,14 +102,16 @@ class FakeClient:
                     == expected_value
                 ]
 
-        return [
-            FakeResult(
-                point.id,
-                0.95,
-                point.payload,
-            )
-            for point in results[:limit]
-        ]
+        return FakeQueryResult(
+            [
+                FakeResult(
+                    point.id,
+                    0.95,
+                    point.payload,
+                )
+                for point in results[:limit]
+            ]
+        )
 
     def count(
         self,
