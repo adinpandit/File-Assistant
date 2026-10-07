@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.doc_store_initialize import (
+from app.core.db import (
     get_connection,
 )
 from app.services.doc_store import (

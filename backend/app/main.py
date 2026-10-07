@@ -8,7 +8,7 @@ from app.api.routes.documents import router as document_router
 from app.api.routes.query import router as query_router
 from app.api.routes.history import router as history_router
 from app.core.logging import setup_logging
-from app.core.doc_store_initialize import initialize_database
+from app.core.db import initialize_database
 
 setup_logging()
 

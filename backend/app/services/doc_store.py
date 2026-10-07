@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.core.doc_store_initialize import get_connection
+from app.core.db import get_connection
 from app.models.document import DocumentResponse
 
 

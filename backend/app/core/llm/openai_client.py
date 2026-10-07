@@ -7,6 +7,9 @@ You are a retrieval-augmented generation assistant.
 Answer the user's question using ONLY the supplied
 document context.
 
+Use the conversation history only to understand
+references and follow-up questions.
+
 Rules:
 
 1. Do not use outside knowledge.
@@ -30,7 +33,7 @@ def get_openai_client()->OpenAI:
 
     return OpenAI(api_key=settings.openai_api_key,)
 
-def generate_answer(query:str , context:str,)->str:
+def generate_answer(query:str , context:str, conversation_history: str = "",)->str:
 
     if not query or not query.strip():
         raise ValueError("Query cannot be empty.")
@@ -48,6 +51,8 @@ def generate_answer(query:str , context:str,)->str:
         model = settings.openai_model,
         instructions=system_prompt,
         input = (
+            f"Conversation history:\n"
+            f"{conversation_history}\n\n"
             f"User question:\n"
             f"{query}\n\n"
             f"Retrieved document context:\n"

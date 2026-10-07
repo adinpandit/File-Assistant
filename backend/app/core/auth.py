@@ -4,7 +4,17 @@ from app.services.user_store import UserStore
 from app.core.security import decode_access_token
 
 
-security = HTTPBearer()
+class ForbiddenHTTPBearer(HTTPBearer):
+    # FastAPI >= 0.122 returns 401 for a missing/malformed Authorization
+    # header; keep the API's 403 for unauthenticated requests.
+    def make_not_authenticated_error(self) -> HTTPException:
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authenticated",
+        )
+
+
+security = ForbiddenHTTPBearer()
 
 user_store = UserStore()
 
