@@ -1,4 +1,3 @@
-
 import pytest
 
 from fastapi.testclient import TestClient
@@ -18,8 +17,8 @@ pytestmark = pytest.mark.usefixtures(
 def test_query_documents(
     monkeypatch,
 ):
-
     def fake_embed_query(text):
+        assert text == "What is Python?"
 
         return [
             0.1,
@@ -28,7 +27,6 @@ def test_query_documents(
         ]
 
     class FakeVectorStore:
-
         def search(
             self,
             query_embedding,
@@ -36,15 +34,11 @@ def test_query_documents(
             document_id=None,
             user_id=None,
         ):
-
-            assert (
-                query_embedding
-                == [
-                    0.1,
-                    0.2,
-                    0.3,
-                ]
-            )
+            assert query_embedding == [
+                0.1,
+                0.2,
+                0.3,
+            ]
 
             assert limit == 5
 
@@ -65,6 +59,24 @@ def test_query_documents(
                 }
             ]
 
+    def fake_generate_answer(
+        query,
+        context,
+        conversation_history="",
+    ):
+        assert query == "What is Python?"
+
+        return (
+            "Python is a programming "
+            "language. [S1]"
+        )
+
+    def fail_rewrite_query(*args, **kwargs):
+        pytest.fail(
+            "rewrite_query should not be called "
+            "without a conversation."
+        )
+
     monkeypatch.setattr(
         query,
         "embed_query",
@@ -73,20 +85,15 @@ def test_query_documents(
 
     monkeypatch.setattr(
         query,
+        "rewrite_query",
+        fail_rewrite_query,
+    )
+
+    monkeypatch.setattr(
+        query,
         "QdrantVectorStore",
         FakeVectorStore,
     )
-
-    def fake_generate_answer(
-        query,
-        context,
-        conversation_history="",
-    ):
-
-        return (
-            "Python is a programming "
-            "language. [S1]"
-        )
 
     monkeypatch.setattr(
         query,
@@ -105,51 +112,57 @@ def test_query_documents(
 
     data = response.json()
 
-    assert (
-        data["query"]
-        == "What is Python?"
-    )
+    assert data["query"] == "What is Python?"
 
-    assert len(
-        data["sources"]
-    ) == 1
+    assert len(data["sources"]) == 1
 
     source = data["sources"][0]
 
-    assert (
-        source["chunk_id"]
-        == "chunk-1"
-    )
-
-    assert (
-        source["document_id"]
-        == "doc-1"
-    )
-
-    assert (
-        source["page_number"]
-        == 1
-    )
+    assert source["chunk_id"] == "chunk-1"
+    assert source["document_id"] == "doc-1"
+    assert source["page_number"] == 1
+    assert source["chunk_index"] == 0
 
     assert (
         source["text"]
-        == (
-            "Python is a "
-            "programming language."
-        )
+        == "Python is a programming language."
     )
 
-    assert (
-        source["score"]
-        == 0.92
-    )
+    assert source["score"] == 0.92
 
 
 def test_query_with_conversation_history(
     monkeypatch,
 ):
+    original_query = "Why is retrieval useful?"
+
+    rewritten_query = (
+        "Why is retrieval useful in "
+        "retrieval-augmented generation?"
+    )
+
+    def fake_rewrite_query(
+        query,
+        conversation_history="",
+    ):
+        assert query == original_query
+
+        assert (
+            "User: What is RAG?"
+            in conversation_history
+        )
+
+        assert (
+            "Assistant: RAG combines retrieval "
+            "with generation."
+            in conversation_history
+        )
+
+        return rewritten_query
 
     def fake_embed_query(text):
+        # Retrieval must use the rewritten query.
+        assert text == rewritten_query
 
         return [
             0.1,
@@ -158,7 +171,6 @@ def test_query_with_conversation_history(
         ]
 
     class FakeVectorStore:
-
         def search(
             self,
             query_embedding,
@@ -166,6 +178,13 @@ def test_query_with_conversation_history(
             document_id=None,
             user_id=None,
         ):
+            assert query_embedding == [
+                0.1,
+                0.2,
+                0.3,
+            ]
+
+            assert limit == 5
 
             return [
                 {
@@ -177,22 +196,19 @@ def test_query_with_conversation_history(
                         "page_number": 1,
                         "chunk_index": 0,
                         "text": (
-                            "RAG combines "
-                            "retrieval with "
-                            "generation."
+                            "RAG combines retrieval "
+                            "with generation."
                         ),
                     },
                 }
             ]
 
     class FakeMessage:
-
         def __init__(
             self,
             role,
             content,
         ):
-
             self.role = role
             self.content = content
 
@@ -200,6 +216,7 @@ def test_query_with_conversation_history(
         conversation_id,
         user_id,
     ):
+        assert conversation_id == "conversation-1"
 
         return object()
 
@@ -208,22 +225,13 @@ def test_query_with_conversation_history(
         user_id,
         limit,
     ):
-
-        assert (
-            conversation_id
-            == "conversation-1"
-        )
-
-        assert (
-            limit == 10
-        )
+        assert conversation_id == "conversation-1"
+        assert limit == 10
 
         return [
             FakeMessage(
                 role="user",
-                content=(
-                    "What is RAG?"
-                ),
+                content="What is RAG?",
             ),
             FakeMessage(
                 role="assistant",
@@ -239,21 +247,18 @@ def test_query_with_conversation_history(
     def fake_generate_answer(
         query,
         context,
-        conversation_history,
+        conversation_history="",
     ):
-
+        # Answer generation must retain the original question.
         captured["query"] = query
-
         captured["context"] = context
-
-        captured[
-            "conversation_history"
-        ] = conversation_history
-
-        return (
-            "RAG uses retrieval "
-            "and generation. [S1]"
+        captured["conversation_history"] = (
+            conversation_history
         )
+
+        return "RAG uses retrieval and generation. [S1]"
+
+    saved_messages = []
 
     def fake_add_message(
         conversation_id,
@@ -261,8 +266,20 @@ def test_query_with_conversation_history(
         role,
         content,
     ):
+        saved_messages.append(
+            {
+                "conversation_id": conversation_id,
+                "user_id": user_id,
+                "role": role,
+                "content": content,
+            }
+        )
 
-        return None
+    monkeypatch.setattr(
+        query,
+        "rewrite_query",
+        fake_rewrite_query,
+    )
 
     monkeypatch.setattr(
         query,
@@ -303,12 +320,8 @@ def test_query_with_conversation_history(
     response = client.post(
         "/api/query",
         json={
-            "query": (
-                "Why is retrieval useful?"
-            ),
-            "conversation_id": (
-                "conversation-1"
-            ),
+            "query": original_query,
+            "conversation_id": "conversation-1",
         },
     )
 
@@ -316,39 +329,44 @@ def test_query_with_conversation_history(
 
     data = response.json()
 
-    assert (
-        data["query"]
-        == "Why is retrieval useful?"
-    )
+    # API response retains the original query.
+    assert data["query"] == original_query
 
-    assert (
-        captured["query"]
-        == "Why is retrieval useful?"
-    )
+    # Answer generation receives the original query.
+    assert captured["query"] == original_query
 
+    # Conversation history reaches answer generation.
     assert (
         "User: What is RAG?"
-        in captured[
-            "conversation_history"
-        ]
+        in captured["conversation_history"]
     )
 
     assert (
         "Assistant: RAG combines retrieval "
         "with generation."
-        in captured[
-            "conversation_history"
-        ]
+        in captured["conversation_history"]
     )
 
+    # Retrieved context reaches answer generation.
     assert (
         "RAG combines retrieval"
         in captured["context"]
     )
 
+    # Original user query and generated answer are persisted.
+    assert len(saved_messages) == 2
+
+    assert saved_messages[0]["role"] == "user"
+    assert saved_messages[0]["content"] == original_query
+
+    assert saved_messages[1]["role"] == "assistant"
+    assert (
+        saved_messages[1]["content"]
+        == "RAG uses retrieval and generation. [S1]"
+    )
+
 
 def test_query_empty_string():
-
     response = client.post(
         "/api/query",
         json={
@@ -360,7 +378,6 @@ def test_query_empty_string():
 
 
 def test_query_limit_validation():
-
     response = client.post(
         "/api/query",
         json={

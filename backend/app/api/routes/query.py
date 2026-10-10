@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from app.core.embeddings import embed_query
 from app.core.vectorstore.qdrant_store import QdrantVectorStore
-from app.core.llm import generate_answer
+from app.core.llm import generate_answer,rewrite_query
 from app.services.retrieval import build_citations,build_context
 from app.core.auth import get_current_user
 from app.services.conv_store import ConversationStore
@@ -88,8 +88,26 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
 
         conversation_history = "\n".join(history_lines)
 
+    retrieval_query = request.query
+
+    if request.conversation_id is not None:
+        try:
+            retrieval_query = rewrite_query(query=request.query,conversation_history=conversation_history,)
+
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=str(exc),
+            ) from exc
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Query rewriting failed: {exc}",
+            ) from exc
+
     try:
-        query_embedding = embed_query(request.query)
+        query_embedding = embed_query(retrieval_query)
 
     except ValueError as exc:
         raise HTTPException(
