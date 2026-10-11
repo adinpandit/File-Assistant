@@ -6,6 +6,8 @@ from app.core.llm import generate_answer,rewrite_query
 from app.services.retrieval import build_citations,build_context
 from app.core.auth import get_current_user
 from app.services.conv_store import ConversationStore
+from app.services.hybrid_retrieval import hybrid_search
+from app.services.reranking import rerank_results
 
 
 router = APIRouter(
@@ -94,17 +96,17 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
         try:
             retrieval_query = rewrite_query(query=request.query,conversation_history=conversation_history,)
 
+            if not retrieval_query or not retrieval_query.strip():
+                retrieval_query = request.query
+
         except ValueError as exc:
             raise HTTPException(
                 status_code=400,
                 detail=str(exc),
             ) from exc
 
-        except Exception as exc:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Query rewriting failed: {exc}",
-            ) from exc
+        except Exception:
+            retrieval_query = request.query
 
     try:
         query_embedding = embed_query(retrieval_query)
@@ -115,17 +117,41 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
             detail=str(exc),
         ) from exc
 
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Query embedding failed: {exc}",
+        ) from exc   
+
     try:
 
         vector_store = QdrantVectorStore()
 
-        results = vector_store.search(query_embedding=query_embedding,limit=request.limit,document_id=request.document_id,user_id=user_id,)
+        candidate_limit = min(max(request.limit*4,20),40,)
+
+        dense_results = vector_store.search(query_embedding=query_embedding,limit=request.limit,document_id=request.document_id,user_id=user_id,)
+
+        if hasattr(vector_store,"get_all_chunks"):
+            corpus=vector_store.get_all_chunks(user_id=user_id , document_id=request.document_id,)
+
+        else:
+            corpus = dense_results
+
+        hybrid_results = hybrid_search(query = retrieval_query , dense_results=dense_results , corpus=corpus , limit = candidate_limit,)
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
 
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Query failed: {exc}",
+            detail=f"Retrieval failed: {exc}",
         ) from exc
+
+    results = rerank_results(query=retrieval_query , results=hybrid_results , limit=request.limit,)
 
     if not results:
 
@@ -141,9 +167,7 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
 
     else:
 
-        context = build_context(
-            results
-        )
+        context = build_context(results)
 
         try:
 
@@ -185,6 +209,9 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
 
             payload = (result.get("payload") or {})
 
+            # Sources report vector similarity; rerank_score only orders results.
+            source_score = result.get("score",0.0)
+
             sources.append(
                 Source(
                     chunk_id=str(payload.get("chunk_id",result["id"],)),
@@ -192,7 +219,7 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
                     page_number=int(payload.get("page_number",0,)),
                     chunk_index=int(payload.get("chunk_index",0,)),
                     text=str(payload.get("text","",)),
-                    score=float(result["score"]),
+                    score=float(source_score),
                 )
             )
 

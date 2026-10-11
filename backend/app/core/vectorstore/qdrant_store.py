@@ -118,6 +118,63 @@ class QdrantVectorStore:
             for result in results
         ]
 
+    def get_all_chunks(self,user_id: str,document_id: str | None = None,page_size: int = 256,) -> list[dict[str, Any]]:
+        
+        if not user_id:
+            raise ValueError("user_id cannot be empty")
+
+        if page_size <= 0:
+            raise ValueError("page_size must be greater than 0")
+
+        if not self.collection_exists():
+            return []
+
+        conditions: list[FieldCondition] = [
+            FieldCondition(
+                key="user_id",
+                match=MatchValue(value=user_id),
+            )
+        ]
+
+        if document_id is not None:
+            conditions.append(
+                FieldCondition(
+                    key="document_id",
+                    match=MatchValue(value=document_id),
+                )
+            )
+
+        scroll_filter = Filter(must=conditions)
+
+        all_chunks: list[dict[str, Any]] = []
+        offset = None
+
+        while True:
+            points, next_offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=page_size,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+
+            for point in points:
+                all_chunks.append(
+                    {
+                        "id": point.id,
+                        "score": 0.0,
+                        "payload": point.payload or {},
+                    }
+                )
+
+            if next_offset is None:
+                break
+
+            offset = next_offset
+
+        return all_chunks
+    
     def delete_document(self , document_id:str,)->None:
 
         if not self.collection_exists():
