@@ -67,6 +67,12 @@ class QdrantVectorStore:
         )
 
     def search(self , query_embedding:list[float] , limit:int=5 , document_id:str|None=None , user_id:str|None=None,)->list[dict[str,Any]]:
+
+        if not user_id or not user_id.strip():
+            raise ValueError(
+                "user_id is required for vector search"
+            )
+    
         if not query_embedding:
             return []
 
@@ -97,10 +103,7 @@ class QdrantVectorStore:
                 )
             )
 
-        search_filter = None
-
-        if conditions:
-            search_filter = Filter(must=conditions,)
+        search_filter = Filter(must=conditions)
 
         results = self.client.query_points(
             collection_name=self.collection_name,
@@ -175,8 +178,18 @@ class QdrantVectorStore:
 
         return all_chunks
     
-    def delete_document(self , document_id:str,)->None:
+    def delete_document(self , document_id:str, user_id:str,)->None:
 
+        if not user_id or not user_id.strip():
+            raise ValueError(
+                "user_id is required for vector deletion"
+            )
+
+        if not document_id or not document_id.strip():
+            raise ValueError(
+                "document_id is required"
+            )
+    
         if not self.collection_exists():
             return
 
@@ -189,7 +202,13 @@ class QdrantVectorStore:
                         match=MatchValue(
                             value=document_id,
                         ),
-                    )
+                    ),
+                    FieldCondition(
+                        key="user_id",
+                        match=MatchValue(
+                            value=user_id,
+                        ),
+                    ),
                 ]
             ),
         )

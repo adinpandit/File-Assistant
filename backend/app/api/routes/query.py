@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field , field_validator
 from app.core.embeddings import embed_query
 from app.core.vectorstore.qdrant_store import QdrantVectorStore
 from app.core.llm import generate_answer,rewrite_query
@@ -8,6 +8,7 @@ from app.core.auth import get_current_user
 from app.services.conv_store import ConversationStore
 from app.services.hybrid_retrieval import hybrid_search
 from app.services.reranking import rerank_results
+from app.services.doc_store import DocumentStore
 
 
 router = APIRouter(
@@ -16,12 +17,14 @@ router = APIRouter(
 )
 
 conversation_store = ConversationStore()
+document_store = DocumentStore()
 
 class QueryRequest(BaseModel):
 
     query: str = Field(
         ...,
         min_length=1,
+        max_length=4000,
     )
 
     limit: int = Field(
@@ -32,6 +35,16 @@ class QueryRequest(BaseModel):
 
     document_id: str | None = None
     conversation_id: str | None = None
+
+    @field_validator("query")
+    @classmethod
+    def query_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(
+                "Query cannot be empty or whitespace-only"
+            )
+
+        return value
 
 class CitationResponse(BaseModel):
 
@@ -63,12 +76,48 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
 
     user_id = str(current_user["user_id"])
 
+    if request.document_id is not None:
+
+        try:
+            document = document_store.get_document(document_id=request.document_id,user_id=user_id,)
+
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid document ID",
+            ) from exc
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to verify document access",
+            ) from exc
+
+        if document is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found",
+            )
+
     if request.conversation_id is not None:
 
-        conversation = conversation_store.get_conversation(conversation_id=request.conversation_id,user_id=user_id,)
+        try:
+            conversation = conversation_store.get_conversation(conversation_id=request.conversation_id,user_id=user_id,)
+
+
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid conversation ID",
+            ) from exc
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to verify conversation access",
+            ) from exc
 
         if conversation is None:
-
             raise HTTPException(
                 status_code=404,
                 detail="Conversation not found",
@@ -78,17 +127,30 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
 
     if request.conversation_id is not None:
 
-        messages = conversation_store.get_recent_messages(conversation_id=request.conversation_id,user_id=user_id,limit=10,)
+        try:
+            messages = conversation_store.get_recent_messages(conversation_id=request.conversation_id,user_id=user_id,limit=10,)
         
-        history_lines = []
+            history_lines = []
 
-        for message in messages:
+            for message in messages:
 
-            role = message.role.capitalize()
+                role = message.role.capitalize()
 
-            history_lines.append(f"{role}: {message.content}")
+                history_lines.append(f"{role}: {message.content}")
 
-        conversation_history = "\n".join(history_lines)
+            conversation_history = "\n".join(history_lines)
+
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid conversation history request",
+            ) from exc
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to load conversation history",
+            ) from exc
 
     retrieval_query = request.query
 
@@ -96,14 +158,8 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
         try:
             retrieval_query = rewrite_query(query=request.query,conversation_history=conversation_history,)
 
-            if not retrieval_query or not retrieval_query.strip():
+            if not (isinstance(retrieval_query, str) and retrieval_query.strip()):
                 retrieval_query = request.query
-
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=400,
-                detail=str(exc),
-            ) from exc
 
         except Exception:
             retrieval_query = request.query
@@ -114,7 +170,7 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail=str(exc),
+            detail="Invalid query for embedding generation",
         ) from exc
 
     except Exception as exc:
@@ -151,7 +207,14 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
             detail=f"Retrieval failed: {exc}",
         ) from exc
 
-    results = rerank_results(query=retrieval_query , results=hybrid_results , limit=request.limit,)
+    try:
+        results = rerank_results(query=retrieval_query , results=hybrid_results , limit=request.limit,)
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Result ranking failed",
+        ) from exc
 
     if not results:
 
@@ -180,7 +243,7 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
         except ValueError as exc:
             raise HTTPException(
                 status_code=400,
-                detail=str(exc),
+                detail="Invalid request for answer generation",
             ) from exc
 
         except Exception as exc:
@@ -189,19 +252,26 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
                 detail=f"Answer generation failed: {exc}",
             ) from exc
 
+        try:
+            citations = build_citations(results)
 
-        citations = build_citations(results)
+            citation_response = [
+                CitationResponse(
+                    citation_id=citation.citation_id,
+                    document_id=citation.document_id,
+                    chunk_id=citation.chunk_id,
+                    page_number=citation.page_number,
+                    chunk_index=citation.chunk_index,
+                )
+                for citation in citations
+            ]
 
-        citation_response = [
-            CitationResponse(
-                citation_id=citation.citation_id,
-                document_id=citation.document_id,
-                chunk_id=citation.chunk_id,
-                page_number=citation.page_number,
-                chunk_index=citation.chunk_index,
-            )
-            for citation in citations
-        ]
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Citation generation failed",
+            ) from exc
+
 
         sources = []
 
@@ -224,9 +294,17 @@ def query_documents(request: QueryRequest,current_user=Depends(get_current_user)
             )
 
     if request.conversation_id is not None:
-        conversation_store.add_message(conversation_id=request.conversation_id,user_id=user_id,role="user",content=request.query,)
 
-        conversation_store.add_message(conversation_id=request.conversation_id,user_id=user_id,role="assistant",content=answer,)
+        try:
+            conversation_store.add_message(conversation_id=request.conversation_id,user_id=user_id,role="user",content=request.query,)
+
+            conversation_store.add_message(conversation_id=request.conversation_id,user_id=user_id,role="assistant",content=answer,)
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to save conversation messages",
+            ) from exc
 
     return QueryResponse(
         query=request.query,

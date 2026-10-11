@@ -1,4 +1,5 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict 
+from pydantic import Field
 
 class Settings(BaseSettings):
     app_name:str = "RAG Assistant"
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
     upload_dir:str = "uploads"
     max_file_size_mb:int = 50
 
-    jwt_secret_key: str = "change-this-in-production"
+    jwt_secret_key: str = Field(min_length=32)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 

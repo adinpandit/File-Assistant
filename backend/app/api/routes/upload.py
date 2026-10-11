@@ -26,7 +26,15 @@ async def upload_document(file: UploadFile = File(...),current_user=Depends(get_
             detail = "Filename is required",
         )
 
-    extension = Path(file.filename).suffix.lower()
+    safe_filename = file.filename.replace("\\", "/").split("/")[-1].strip()
+
+    if not safe_filename or safe_filename in {".", ".."}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename",
+        )
+
+    extension = Path(safe_filename).suffix.lower()
 
     if extension not in allowed_extensions:
         raise HTTPException(
@@ -42,18 +50,12 @@ async def upload_document(file: UploadFile = File(...),current_user=Depends(get_
 
     document_id = str(uuid4())
 
-    safe_filename = Path(file.filename).name
+    file_path = upload_dir / f"{document_id}_{safe_filename}"
 
-    file_path = upload_dir/(f"{document_id}_{safe_filename}")
+    max_size = (settings.max_file_size_mb * 1024 * 1024)
 
     try:
-        contents = await file.read()
-
-        max_size = (
-            settings.max_file_size_mb
-            * 1024
-            * 1024
-        )
+        contents = await file.read(max_size + 1)
 
         if len(contents) > max_size:
             raise HTTPException(
@@ -63,22 +65,26 @@ async def upload_document(file: UploadFile = File(...),current_user=Depends(get_
                     f"{settings.max_file_size_mb} MB limit"
                 ),
             )
+
+        if not contents:
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded file is empty",
+            )
         
         file_path.write_bytes(contents)
+
+        user_id = str(current_user["user_id"])
 
         result = ingest_document(
             file_path=file_path,
             document_id=document_id,
-            user_id=str(
-                current_user["user_id"]
-            ),
+            user_id=user_id,
         )
 
         document = document_store.create_document(
             document_id=document_id,
-            user_id=str(
-                current_user["user_id"]
-            ),
+            user_id=user_id,
             filename=safe_filename,
             file_type=extension.lstrip("."),
             page_count=result.page_count,
@@ -98,6 +104,9 @@ async def upload_document(file: UploadFile = File(...),current_user=Depends(get_
             status_code=500,
             detail = f"Document ingestion failed: {e}",
         ) from e
+
+    finally:
+        await file.close()
 
     return{
         "document_id": document.document_id,

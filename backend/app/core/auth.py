@@ -1,7 +1,8 @@
 from fastapi import Depends,HTTPException,status
-from fastapi.security import (HTTPAuthorizationCredentials,HTTPBearer,)
+from fastapi.security import HTTPAuthorizationCredentials,HTTPBearer
 from app.services.user_store import UserStore
 from app.core.security import decode_access_token
+from uuid import UUID
 
 
 class ForbiddenHTTPBearer(HTTPBearer):
@@ -37,10 +38,23 @@ def get_current_user(credentials:HTTPAuthorizationCredentials = Depends(security
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",
         )
+    
+    try:
+        normalized_user_id = str(UUID(str(user_id)))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+        ) from exc
 
-    user = user_store.get_user_by_id(
-        user_id,
-    )
+    try:
+        user = user_store.get_user_by_id(normalized_user_id)
+    except Exception as exc:
+        # Do not disguise a database failure as an invalid token.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service unavailable",
+        ) from exc
 
     if user is None:
         raise HTTPException(
