@@ -1,0 +1,32 @@
+{
+  "k": 5,
+  "cases": [
+    {
+      "name": "exact technical term",
+      "user_id": "593af9fd-1a1c-45eb-bd43-2f3a2420f078",
+      "document_id": "6814d8fb-55a8-4bd6-9488-c6b256922458",
+      "query": "What does the document say about Lorem Ipsum?",
+      "relevant_chunk_ids": [
+        "8c98fa42-ab42-451f-b426-7dcbb01559ad"
+      ]
+    },
+    {
+      "name": "opening paragraph retrieval",
+      "user_id": "593af9fd-1a1c-45eb-bd43-2f3a2420f078",
+      "document_id": "6814d8fb-55a8-4bd6-9488-c6b256922458",
+      "query": "What phrase follows 'Lorem ipsum dolor sit amet' in the document?",
+      "relevant_chunk_ids": [
+        "8c98fa42-ab42-451f-b426-7dcbb01559ad"
+      ]
+    },
+    {
+      "name": "final paragraph retrieval",
+      "user_id": "593af9fd-1a1c-45eb-bd43-2f3a2420f078",
+      "document_id": "6814d8fb-55a8-4bd6-9488-c6b256922458",
+      "query": "What phrase begins the final paragraph of the document?",
+      "relevant_chunk_ids": [
+        "b78f1694-9461-49b3-9051-16ed337a765c"
+      ]
+    }
+  ]
+}
