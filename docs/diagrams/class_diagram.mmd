@@ -1,0 +1,105 @@
+---
+title: RAG Assistant - Class Diagram
+---
+classDiagram
+direction TB
+%% Simplified view of backend/app. Method names match the code.
+%% Several backend components are Python modules of functions rather than classes;
+%% they are shown as <<module>> boxes with a readable name and their source file.
+%% Arrow --> means "uses / calls".
+%% Colours: green = API routes, blue = processing services, purple = LLM,
+%%          yellow = data stores (PostgreSQL and Qdrant).
+
+class UploadRouter {
+    <<API>>
+    POST /api/upload
+    +upload_document(file, user)
+}
+
+class QueryRouter {
+    <<API>>
+    POST /api/query
+    +query_documents(question, user)
+}
+
+class IngestionService {
+    <<module>>
+    services/ingestion.py
+    +ingest_document(file, document_id, user_id)
+    steps: parse, chunk, embed, store
+}
+
+class Embeddings {
+    <<module>>
+    core/embeddings.py
+    model : bge-small-en-v1.5
+    +embed_documents(texts)
+    +embed_query(question)
+}
+
+class QdrantVectorStore {
+    <<Vector DB>>
+    collection_name : document_chunks
+    +upsert_chunks(chunks, embeddings)
+    +search(query_embedding, limit)
+    +delete_document(document_id)
+}
+
+class HybridRetrieval {
+    <<module>>
+    services/hybrid_retrieval.py
+    +hybrid_search(query, dense_results, corpus)
+    BM25 + vector results fused with RRF
+}
+
+class Reranker {
+    <<module>>
+    services/reranking.py
+    model : cross-encoder
+    +rerank_results(query, results, limit)
+}
+
+class LLMClient {
+    <<LLM>>
+    core/llm/openai_client.py
+    model : gpt-5-mini
+    +generate_answer(query, context, history)
+}
+
+class DocumentStore {
+    <<PostgreSQL>>
+    table : documents
+    +create_document(...)
+    +list_documents(user_id)
+    +delete_document(document_id, user_id)
+}
+
+class ConversationStore {
+    <<PostgreSQL>>
+    tables : conversations, messages
+    +add_message(conversation_id, role, content)
+    +get_recent_messages(conversation_id)
+}
+
+UploadRouter --> IngestionService : processes file
+UploadRouter --> DocumentStore : saves metadata
+IngestionService --> Embeddings : embeds chunks
+IngestionService --> QdrantVectorStore : stores vectors
+
+QueryRouter --> Embeddings : embeds question
+QueryRouter --> QdrantVectorStore : vector search
+QueryRouter --> HybridRetrieval : combines results
+QueryRouter --> Reranker : reorders chunks
+QueryRouter --> LLMClient : generates answer
+QueryRouter --> ConversationStore : reads / saves history
+
+style UploadRouter fill:#e3f4e1,stroke:#2e7d32,color:#222
+style QueryRouter fill:#e3f4e1,stroke:#2e7d32,color:#222
+style IngestionService fill:#dcebfa,stroke:#2f6db3,color:#222
+style Embeddings fill:#dcebfa,stroke:#2f6db3,color:#222
+style HybridRetrieval fill:#dcebfa,stroke:#2f6db3,color:#222
+style Reranker fill:#dcebfa,stroke:#2f6db3,color:#222
+style LLMClient fill:#f6e6f7,stroke:#8e44ad,color:#222
+style QdrantVectorStore fill:#fdf2d0,stroke:#b8860b,color:#222
+style DocumentStore fill:#fdf2d0,stroke:#b8860b,color:#222
+style ConversationStore fill:#fdf2d0,stroke:#b8860b,color:#222
